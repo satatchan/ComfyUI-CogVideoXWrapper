@@ -4,10 +4,10 @@ import folder_paths
 import comfy.model_management as mm
 from comfy.utils import ProgressBar
 from diffusers.schedulers import CogVideoXDDIMScheduler, CogVideoXDPMScheduler
-from diffusers.models import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel
+from diffusers.models import AutoencoderKLCogVideoX
 from .pipeline_cogvideox import CogVideoXPipeline
 from contextlib import nullcontext
-
+from .cogvdeox_transformer_3d_custom import CogVideoXTransformer3DModel
 
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -91,7 +91,7 @@ class DownloadAndLoadCogVideoModel:
             pipe.transformer.to(memory_format=torch.channels_last)
             pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune", fullgraph=True)
         elif compile == "onediff":
-            from onediffx import compile_pipe, quantize_pipe
+            from onediffx import compile_pipe
             os.environ['NEXFORT_FX_FORCE_TRITON_SDPA'] = '1'
             
             pipe = compile_pipe(
@@ -279,6 +279,7 @@ class CogVideoSampler:
             "optional": {
                 "samples": ("LATENT", ),
                 "denoise_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "excluded_blocks": ("STRING", {"forceInput": True, "tooltip": "Comma separated list of transformer block indices (0-42) to skip"}),
             }
         }
 
@@ -287,13 +288,18 @@ class CogVideoSampler:
     FUNCTION = "process"
     CATEGORY = "CogVideoWrapper"
 
-    def process(self, pipeline, positive, negative, steps, cfg, seed, height, width, num_frames, scheduler, t_tile_length, t_tile_overlap, samples=None, denoise_strength=1.0):
+    def process(self, pipeline, positive, negative, steps, cfg, seed, height, width, num_frames, scheduler, t_tile_length, t_tile_overlap, samples=None, denoise_strength=1.0, excluded_blocks=None):
         mm.soft_empty_cache()
 
         assert t_tile_length > t_tile_overlap, "t_tile_length must be greater than t_tile_overlap"
         assert t_tile_length <= num_frames, "t_tile_length must be equal or less than num_frames"
         t_tile_length = t_tile_length // 4
         t_tile_overlap = t_tile_overlap // 4
+
+        if excluded_blocks is not None:
+            excluded_blocks = list(map(lambda x: int(x.strip()), excluded_blocks.split(',')))
+            print("skipping transformer blocks: ", excluded_blocks)
+
 
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
@@ -332,7 +338,8 @@ class CogVideoSampler:
                 negative_prompt_embeds=negative.to(dtype).to(device),
                 generator=generator,
                 device=device,
-                scheduler_name=scheduler
+                scheduler_name=scheduler,
+                excluded_blocks=excluded_blocks
             )
         if not pipeline["cpu_offloading"]:
             pipe.transformer.to(offload_device)

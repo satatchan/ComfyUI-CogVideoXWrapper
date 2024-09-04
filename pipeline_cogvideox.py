@@ -337,6 +337,7 @@ class CogVideoXPipeline(DiffusionPipeline):
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         device = torch.device("cuda"),
         scheduler_name: str = "DPM",
+        excluded_blocks: Optional[List[int]] = None,
     ):
         """
         Function invoked when calling the pipeline for generation.
@@ -592,6 +593,7 @@ class CogVideoXPipeline(DiffusionPipeline):
                         timestep=timestep,
                         image_rotary_emb=image_rotary_emb,
                         return_dict=False,
+                        excluded_blocks=excluded_blocks
                     )[0]
                     noise_pred = noise_pred.float()
 
