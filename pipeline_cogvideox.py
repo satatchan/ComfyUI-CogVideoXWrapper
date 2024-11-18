@@ -322,7 +322,7 @@ class CogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
                 grid_size=(grid_height, grid_width),
                 temporal_size=base_num_frames,
                 grid_type="slice",
-                max_size=(base_size_height, base_size_width),
+                max_size=(4096, 4096),
             )
 
         freqs_cos = freqs_cos.to(device=device)
